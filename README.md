@@ -1,2 +1,2 @@
 # ArithParser
-Simple parser for arithmetic operations made in Haskell
+A monadic combinatorial parser for arithmetic expressions, developed in Haskell.
