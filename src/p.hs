@@ -11,7 +11,7 @@ import Data.Char (isDigit, isSpace)
 import Data.List (intercalate)
 
 data Pos = Pos
-  { posLine :: !Int
+  { posLine   :: !Int
   , posColumn :: !Int
   } deriving (Eq, Ord, Show)
 
