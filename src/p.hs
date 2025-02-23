@@ -3,13 +3,12 @@
 
 module Main where
 
-import Control.Applicative (Alternative(..))
+import Control.Applicative (Alternative(..), optional)
 import System.Environment (getArgs)
 import Control.Monad (void, when)
 import Control.Monad.Except (MonadError(..))
 import Data.Char (isDigit, isSpace)
 import Data.List (intercalate)
-
 
 data Pos = Pos
   { posLine :: !Int
@@ -98,7 +97,7 @@ lexeme :: Parser a -> Parser a
 lexeme p = p <* spaces
 
 char :: Char -> Parser Char
-char c = lexeme $ Parser $ \s -> case stateInput s of
+char c = Parser $ \s -> case stateInput s of
   (x:xs) | x == c -> Right (c, aPos c s)
   _ -> Left $ ParseError
     { errPos = statePos s
@@ -130,25 +129,47 @@ between open close p = do
   spaces
   return x
 
+data Grammar = Grammar
+  { exprParser :: Parser Expr
+  , termParser :: Parser Expr
+  , factorParser :: Parser Expr
+  , addOpParser :: Parser (Expr -> Expr -> Expr)
+  , mulOpParser :: Parser (Expr -> Expr -> Expr)
+  }
+
+dGrammar :: Grammar
+dGrammar = Grammar
+  { exprParser = term `chainl1` addOp
+  , termParser = factor `chainl1` mulOp
+  , factorParser = wContext "in a factor" $ 
+      (Lit <$> integer) <|> bP (exprParser dGrammar)
+  , addOpParser = op '+' Add <|> op '-' Sub
+  , mulOpParser = op '*' Mul <|> op '/' Div
+  }
+  where
+    op :: Char -> (Expr -> Expr -> Expr) -> Parser (Expr -> Expr -> Expr)
+    op c f = spaces *> char c *> spaces *> pure f
+
+    bP :: Parser Expr -> Parser Expr
+    bP p = between (char '(') (char ')') p <* spaces
+
 data Expr = Add Expr Expr | Sub Expr Expr | Mul Expr Expr | Div Expr Expr | Lit Int
   deriving (Show)
 
 expr :: Parser Expr
-expr = term `chainl1` addOp
+expr = exprParser dGrammar
 
 term :: Parser Expr
-term = factor `chainl1` mulOp
+term = termParser dGrammar
 
 factor :: Parser Expr
-factor = wContext "in a factor" $
-  (Lit <$> integer)
-  <|> between (char '(') (char ')') expr
+factor = factorParser dGrammar
 
 addOp :: Parser (Expr -> Expr -> Expr)
-addOp = (char '+' *> pure Add) <|> (char '-' *> pure Sub)
+addOp = addOpParser dGrammar
 
 mulOp :: Parser (Expr -> Expr -> Expr)
-mulOp = (char '*' *> pure Mul) <|> (char '/' *> pure Div)
+mulOp = mulOpParser dGrammar
 
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
 chainl1 p op = do
@@ -156,10 +177,12 @@ chainl1 p op = do
   rest x
   where
     rest x = do
-      f <- op
-      y <- p
-      rest (f x y)
-      <|> pure x
+      maybeOp <- optional op
+      case maybeOp of
+        Nothing -> return x
+        Just f -> do
+          y <- p
+          rest (f x y)
 
 parse :: String -> Parser a -> Either String a
 parse input p = case rParser p (ParseState (Pos 1 1) input) of
