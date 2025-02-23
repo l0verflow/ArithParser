@@ -4,10 +4,12 @@
 module Main where
 
 import Control.Applicative (Alternative(..))
+import System.Environment (getArgs)
 import Control.Monad (void, when)
 import Control.Monad.Except (MonadError(..))
 import Data.Char (isDigit, isSpace)
 import Data.List (intercalate)
+
 
 data Pos = Pos
   { posLine :: !Int
@@ -178,8 +180,8 @@ formatErr err = unlines
 
 main :: IO ()
 main = do
-  
-  let input = "-- Change Here --"
+  args <- getArgs
+  let input = if null args then "1 + 1" else head args
 
   case parse input expr of
     Left err -> putStrLn err
